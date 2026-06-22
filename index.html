@@ -131,6 +131,9 @@
         .save-bar { position: sticky; bottom: 20px; text-align: center; z-index: 100; }
         .btn-save { background: var(--text-color); color: white; border: none; padding: 12px 50px; border-radius: 30px; font-weight: bold; cursor: pointer; box-shadow: 0 4px 15px rgba(0,0,0,0.2); }
     </style>
+    <!-- Firebase SDK (v9 Compat Mode) -->
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
 </head>
 <body>
     <div class="container">
@@ -206,6 +209,21 @@
     </div>
 
     <script>
+        // Firebase 설정 및 초기화
+        const firebaseConfig = {
+            apiKey: "AIzaSyBRGQpQfS8kFpSgJprljD27ng2_ifcUBL4",
+            authDomain: "apartment-budget-planner.firebaseapp.com",
+            projectId: "apartment-budget-planner",
+            storageBucket: "apartment-budget-planner.firebasestorage.app",
+            messagingSenderId: "350856974954",
+            appId: "1:350856974954:web:e44402251d07d5c1c9f013",
+            // 아시아 및 기타 리전일 가능성을 고려하여 기본 databaseURL 자동 매핑
+            databaseURL: "https://apartment-budget-planner-default-rtdb.firebaseio.com"
+        };
+        
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.database();
+
         let assets = [
             { date: "2026-06-01", name: "현재 예금", amount: 5000 },
             { date: "2026-08-15", name: "적금 만기", amount: 2000 },
@@ -222,13 +240,26 @@
         ];
 
         function init() {
+            // 1. 로컬 브라우저 백업 데이터 선 로드
             const saved = localStorage.getItem('real_estate_v5_flow');
             if (saved) {
                 const data = JSON.parse(saved);
-                assets = data.assets;
-                expenses = data.expenses;
+                assets = data.assets || [];
+                expenses = data.expenses || [];
             }
             renderAll();
+
+            // 2. Firebase 실시간 리스너 연결 (서버 데이터 실시간 자동 수신)
+            db.ref('budget').on('value', (snapshot) => {
+                const data = snapshot.val();
+                if (data) {
+                    assets = data.assets || [];
+                    expenses = data.expenses || [];
+                    renderAll();
+                }
+            }, (error) => {
+                console.error("Firebase 실시간 연결 실패 (규칙 설정 확인 필요):", error);
+            });
         }
 
         function renderAll() {
@@ -336,9 +367,18 @@
         }
 
         function saveData() {
+            // 로컬 브라우저 백업용 저장
             localStorage.setItem('real_estate_v5_flow', JSON.stringify({ assets, expenses }));
-            alert('자금 흐름 계획이 저장되었습니다.');
-            renderTimeline();
+            
+            // Firebase 서버에 저장 (실시간 동기화)
+            db.ref('budget').set({ assets, expenses })
+                .then(() => {
+                    alert('자금 흐름 계획이 성공적으로 서버에 저장 및 실시간 동기화되었습니다!');
+                })
+                .catch((error) => {
+                    console.error("Firebase 저장 에러:", error);
+                    alert('서버 저장 실패: ' + error.message + '\n\n* Firebase Realtime Database의 규칙(Rules)이 "테스트 모드"(.read: true, .write: true)로 설정되어 있는지 확인해 주세요.');
+                });
         }
 
         window.onload = init;
